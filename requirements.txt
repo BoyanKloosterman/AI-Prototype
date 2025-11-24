@@ -7,3 +7,4 @@ umap-learn
 jupyter
 ipykernel
 nltk
+sentence_transformers
