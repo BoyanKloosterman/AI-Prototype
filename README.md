@@ -1,8 +1,8 @@
-# VKM Content-Based Recommender System
+# VKM Student-to-Module Recommender System (Smart Study Coach)
 
-**AI-Prototype voor Module Aanbevelingen**
+**AI-Prototype voor Persoonlijke Module Aanbevelingen**
 
-Een geavanceerd content-based recommender systeem dat machine learning embeddings gebruikt om vergelijkbare onderwijsmodules te vinden en personaliseerde aanbevelingen te geven.
+Een intelligent recommender systeem dat studenten helpt om onderwijsmodules te vinden die passen bij hun interesses en doelen. Het systeem gebruikt TF-IDF vectorization en cosine similarity om student profielen te matchen met modules.
 
 ---
 
@@ -21,23 +21,38 @@ Een geavanceerd content-based recommender systeem dat machine learning embedding
 
 ## 🎯 Project Overzicht
 
-Dit project implementeert een **Content-Based Recommender System** voor de VKM (Vrije Keuze Module) dataset. Het systeem analyseert tekstuele inhoud van modules en gebruikt state-of-the-art NLP-technieken om vergelijkbare modules te identificeren.
+Dit project implementeert een **Student-to-Module Recommender System** (Smart Study Coach) voor de VKM (Vrije Keuze Module) dataset. Het systeem accepteert student profielen als vrije tekst input en vindt modules die het beste passen bij de student interesses.
+
+### ✅ Wat het WEL is
+
+Een **Smart Study Coach** die:
+- Student profiel accepteert als vrije tekst (bijv. "Ik ben geïnteresseerd in psychologie en coaching")
+- Dit profiel vectoriseert met TF-IDF
+- Cosine similarity berekent tussen student en alle modules
+- Top 3-5 aanbevelingen geeft met uitleg waarom ze passen
+
+### ❌ Wat het NIET is
+
+- **GEEN** module-naar-module vergelijking (bijv. "modules die lijken op module X")
+- **GEEN** collaborative filtering
+- **GEEN** content similarity tussen modules onderling
 
 ### Kernfunctionaliteiten
 
-- ✅ **Automatische tekstverwerking** met NLP (lemmatization, stopword removal)
-- ✅ **Semantic embeddings** via Sentence Transformers
-- ✅ **Cosine similarity berekeningen** voor content matching
-- ✅ **Interactieve zoekfunctie** met visualisaties
-- ✅ **Multi-feature analyse** (beschrijving, content, leerresultaten)
+- ✅ **Student profiel input** als vrije tekst
+- ✅ **TF-IDF vectorization** voor tekst representatie
+- ✅ **Cosine similarity** tussen student profiel en modules
+- ✅ **Top 3-5 aanbevelingen** met similarity scores
+- ✅ **Uitleg functionaliteit** (waarom past deze module bij jou?)
+- ✅ **Hyperparameter tuning** (n-grams, max_features, stopwoorden)
 - ✅ **Uitgebreide EDA** met statistische analyses
 
 ### Use Cases
 
-1. **Studenten**: Vind modules die passen bij je interesses
-2. **Studiebegeleiders**: Adviseer vergelijkbare alternatieven
-3. **Onderwijscoördinatoren**: Analyseer module overlap
-4. **Curriculum Ontwikkelaars**: Identificeer gaps en redundanties
+1. **Studenten**: Ontdek modules die passen bij jouw interesses en doelen
+2. **Studiebegeleiders**: Krijg data-driven aanbevelingen voor studenten
+3. **Smart Study Coach**: Automatische module matching op basis van student input
+4. **Onderwijsvernieuwing**: Inzicht in hoe modules aansluiten bij student wensen
 
 ---
 
@@ -47,7 +62,7 @@ Het systeem bestaat uit vier hoofdcomponenten die sequentieel worden uitgevoerd:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    VKM RECOMMENDER PIPELINE                      │
+│           STUDENT-TO-MODULE RECOMMENDER PIPELINE                │
 └─────────────────────────────────────────────────────────────────┘
 
 1. DATA PREPARATION                    2. EXPLORATORY DATA ANALYSIS
@@ -64,16 +79,19 @@ Het systeem bestaat uit vier hoofdcomponenten die sequentieel worden uitgevoerd:
    └─────────────────┘
            │
            ↓
-3. FEATURE ENGINEERING                 4. RECOMMENDER SYSTEM
+3. TF-IDF VECTORIZATION                4. STUDENT-MODULE MATCHING
    ┌─────────────────┐                   ┌──────────────────┐
-   │ Sentence        │                   │ Similarity       │
-   │ Transformers    │                   │ Calculation      │
-   │ (Multilingual)  │                   ├──────────────────┤
-   ├─────────────────┤    ──────────→    │ Recommendation   │
-   │ Text → Vectors  │                   │ Engine           │
-   │ (Embeddings)    │                   ├──────────────────┤
-   │ 384-dim vectors │                   │ Interactive      │
-   └─────────────────┘                   │ Search Interface │
+   │ TfidfVectorizer │                   │ Student Profile  │
+   │ Training        │                   │ Input (Text)     │
+   ├─────────────────┤    ──────────→    ├──────────────────┤
+   │ Hyperparameter  │                   │ Vectorize with   │
+   │ Tuning          │                   │ same Vectorizer  │
+   │ (n-grams, etc.) │                   ├──────────────────┤
+   ├─────────────────┤                   │ Cosine Similarity│
+   │ Module Vectors  │                   │ Calculation      │
+   │ + Fitted Model  │                   ├──────────────────┤
+   └─────────────────┘                   │ Top 3-5          │
+                                         │ Recommendations  │
                                          └──────────────────┘
 ```
 
@@ -81,7 +99,6 @@ Het systeem bestaat uit vier hoofdcomponenten die sequentieel worden uitgevoerd:
 
 **Fase 1: Data Preparation** (`prepare_dataset.ipynb`)
 - Input: `Uitgebreide_VKM_dataset.csv`
-- Verwijdert kleurkolommen (Rood, Groen, Blauw, Geel)
 - Vult ontbrekende waarden in
 - Normaliseert tekst en verwijdert stopwoorden
 - Lemmatiseert Nederlandse tekst
@@ -93,17 +110,20 @@ Het systeem bestaat uit vier hoofdcomponenten die sequentieel worden uitgevoerd:
 - Multivariate analyse: complexe patronen
 - Outlier detectie met IQR methode
 
-**Fase 3: Feature Engineering** (`feature_engineering.ipynb`)
-- Genereert embeddings met `paraphrase-multilingual-MiniLM-L12-v2`
-- Converteert tekst naar 384-dimensionale vectoren
-- Creëert embeddings voor 4 tekstkolommen
-- Slaat embeddings op als `.npy` bestanden
+**Fase 3: TF-IDF Vectorization** (`feature_engineering.ipynb`)
+- Combineert alle tekstkolommen per module
+- Traint TfidfVectorizer op modules
+- **Hyperparameter tuning**:
+  - N-grams: (1,1) vs (1,2)
+  - Max features: 5000 vs 6000
+  - Stopwoorden: aan/uit
+- Slaat fitted vectorizer + matrix op
 
-**Fase 4: Recommender System** (`content_based_recommender.ipynb`)
-- Berekent cosine similarity tussen modules
-- Implementeert aanbevelingssysteem
-- Biedt interactieve zoekinterface
-- Visualiseert resultaten
+**Fase 4: Student-Module Matching** (`content_based_recommender.ipynb`)
+- Student vult profiel in als tekst
+- Vectoriseert profiel met **dezelfde** TF-IDF vectorizer
+- Berekent cosine similarity met alle modules
+- Toont top 3-5 matches met uitleg
 
 ---
 
