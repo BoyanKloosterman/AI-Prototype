@@ -1,4 +1,4 @@
-# VKM Student-to-Module Recommender System (Smart Study Coach)
+# VKM Student-to-Module Recommender System 
 
 **AI-Prototype voor Persoonlijke Module Aanbevelingen**
 
@@ -51,8 +51,7 @@ Een **Recommender** die:
 
 1. **Studenten**: Ontdek modules die passen bij jouw interesses en doelen
 2. **Studiebegeleiders**: Krijg data-driven aanbevelingen voor studenten
-3. **Smart Study Coach**: Automatische module matching op basis van student input
-4. **Onderwijsvernieuwing**: Inzicht in hoe modules aansluiten bij student wensen
+3. **Onderwijsvernieuwing**: Inzicht in hoe modules aansluiten bij student wensen
 
 ---
 
