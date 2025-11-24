@@ -21,11 +21,11 @@ Een intelligent recommender systeem dat studenten helpt om onderwijsmodules te v
 
 ## 🎯 Project Overzicht
 
-Dit project implementeert een **Student-to-Module Recommender System** (Smart Study Coach) voor de VKM (Vrije Keuze Module) dataset. Het systeem accepteert student profielen als vrije tekst input en vindt modules die het beste passen bij de student interesses.
+Dit project implementeert een **Student-to-Module Recommender System**  voor de VKM (Vrije Keuze Module) dataset. Het systeem accepteert student profielen als vrije tekst input en vindt modules die het beste passen bij de student interesses.
 
 ### ✅ Wat het WEL is
 
-Een **Smart Study Coach** die:
+Een **Recommender** die:
 - Student profiel accepteert als vrije tekst (bijv. "Ik ben geïnteresseerd in psychologie en coaching")
 - Dit profiel vectoriseert met TF-IDF
 - Cosine similarity berekent tussen student en alle modules
