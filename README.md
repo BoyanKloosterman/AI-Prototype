@@ -109,6 +109,12 @@ Het systeem bestaat uit vier hoofdcomponenten die sequentieel worden uitgevoerd:
 - Multivariate analyse: complexe patronen
 - Outlier detectie met IQR methode
 
+**Fase 2b: Dimensionality Reduction Analysis** (`eda_dimensionality_reduction.ipynb`) *(Optioneel)*
+- PCA: Principal Component Analysis voor lineaire dimensie reductie
+- t-SNE: Visualisatie van lokale structuur
+- UMAP: Uniform Manifold Approximation voor globale en lokale structuur
+- Vergelijking van verschillende reductie technieken
+
 **Fase 3: TF-IDF Vectorization** (`feature_engineering.ipynb`)
 - Combineert alle tekstkolommen per module
 - Traint TfidfVectorizer op modules
@@ -181,54 +187,68 @@ Na cleaning:
 
 ## 🔧 Feature Engineering
 
-### Sentence Embeddings
+### TF-IDF Vectorization
 
-We gebruiken het **Sentence Transformers** framework met het `paraphrase-multilingual-MiniLM-L12-v2` model:
+We gebruiken **TF-IDF (Term Frequency-Inverse Document Frequency)** vectorization om tekstuele features om te zetten naar numerieke representaties. TF-IDF weegt woorden op basis van hun frequentie in een document versus hun frequentie in de hele dataset.
 
-**Model Specificaties:**
-- **Architectuur**: MiniLM (distilled BERT)
-- **Talen**: 50+ (inclusief Nederlands)
-- **Embedding dimensie**: 384
-- **Training**: Paraphrase detection task
-- **Performance**: 93.4% accuracy op STS benchmark
+**TF-IDF Formule:**
+```
+TF-IDF(t, d) = TF(t, d) × IDF(t)
 
-### Embedding Generatie
+Waar:
+- TF(t, d) = frequentie van term t in document d
+- IDF(t) = log(N / df(t))
+- N = totaal aantal documenten
+- df(t) = aantal documenten met term t
+```
+
+### Vectorizer Configuratie
+
+Na hyperparameter tuning is de optimale configuratie:
 
 ```python
-# Voor elke tekstkolom
-text → Tokenization → BERT Encoding → Mean Pooling → 384D Vector
-
-Voorbeeld:
-"kennismaken psychologie introductie gedrag cognitie"
-                    ↓
-    [0.23, -0.41, 0.67, ..., 0.15]  # 384 dimensies
+TfidfVectorizer(
+    max_features=6000,           # Top 6000 meest frequente features
+    ngram_range=(1, 2),         # Unigrams + bigrams voor context
+    min_df=2,                   # Term moet in min. 2 documenten voorkomen
+    max_df=0.8,                 # Term mag in max. 80% documenten voorkomen
+    sublinear_tf=True,          # Log scaling voor term frequency
+    stop_words=None             # Geen stopwoorden (data is al gepreprocessed)
+)
 ```
 
-### Feature Matrix
+### Feature Generatie
 
-| Embedding Type | Dimensies | Beschrijving |
-|----------------|-----------|--------------|
-| `shortdescription_clean` | 384 | Korte samenvatting |
-| `description_clean` | 384 | Volledige beschrijving |
-| `content_clean` | 384 | Inhoudelijke details |
-| `learningoutcomes_clean` | 384 | Leerresultaten |
-| **Combined** | **1536** | **Alle features samengevoegd** |
+```python
+# Combineer alle tekstkolommen per module
+combined_text = (
+    shortdescription_clean + " " +
+    description_clean + " " +
+    content_clean + " " +
+    learningoutcomes_clean
+)
 
-### Embedding Eigenschappen
-
-**Statistieken van combined embeddings:**
-```
-Shape: (266, 1536)
-Min waarde: -1.0
-Max waarde: 1.0
-Gemiddelde: ~0.0
-Std dev: ~0.3
+# Vectorize met TF-IDF
+text → Tokenization → TF-IDF Calculation → Sparse Vector (6000 features)
 ```
 
-**Distributie:**
-- Embeddings zijn genormaliseerd tussen -1 en 1
-- Volgen ongeveer een normale distributie
-- Geschikt voor cosine similarity berekeningen
+### TF-IDF Matrix Eigenschappen
+
+**Statistieken:**
+```
+Shape: (211, 2552)  # 211 modules, 2552 unieke features
+Sparsity: ~98%      # Meeste waarden zijn 0 (sparse matrix)
+Gemiddelde TF-IDF waarde: ~0.0024
+Max TF-IDF waarde: ~0.95
+Aantal non-zero elementen per module: ~47
+```
+
+**Voordelen van TF-IDF:**
+- ✅ Eenvoudig en snel te berekenen
+- ✅ Goede baseline voor tekst matching
+- ✅ Interpretabel (je kunt zien welke woorden belangrijk zijn)
+- ✅ Werkt goed voor Nederlandse tekst na preprocessing
+- ✅ Sparse representatie (efficiënt geheugengebruik)
 
 ---
 
@@ -256,35 +276,39 @@ Waar:
 - `0.3-0.5`: Enige overlap
 - `< 0.3`: Weinig overeenkomst
 
-### ContentBasedRecommender Class
+### StudentModuleRecommender Class
 
 ```python
-class ContentBasedRecommender:
+class StudentModuleRecommender:
     """
+    Student-to-Module Recommender System.
+    
     Hoofdfunctionaliteiten:
-    1. get_recommendations() - Krijg aanbevelingen voor een module
-    2. get_module_info() - Toon module details
-    3. compare_modules() - Vergelijk twee modules
-    4. get_statistics() - Similarity statistieken
+    1. get_recommendations_for_student() - Aanbevelingen op basis van student profiel
+    2. explain_recommendation() - Uitleg waarom een module past
+    3. get_statistics() - TF-IDF en similarity statistieken
     """
 ```
 
 **Methodes:**
 
-1. **`get_recommendations(module_id, n_recommendations=5, embedding_type='combined')`**
-   - Input: Module ID of naam
-   - Output: Top-N vergelijkbare modules met similarity scores
-   - Parameters: Kies embedding type voor specifieke matching
+1. **`get_recommendations_for_student(student_profile, n_recommendations=5, min_similarity=0.0, level_filter=None)`**
+   - Input: Student profiel als vrije tekst (bijv. "Ik ben geïnteresseerd in psychologie en coaching")
+   - Output: Top-N modules met similarity scores en uitleg
+   - Parameters: 
+     - `n_recommendations`: Aantal aanbevelingen (default: 5)
+     - `min_similarity`: Minimale similarity threshold (default: 0.0)
+     - `level_filter`: Filter op niveau (bijv. "NLQF5") (optioneel)
 
-2. **`compare_modules(module_id1, module_id2)`**
-   - Vergelijkt twee modules over alle embedding types
-   - Toont per-feature similarity scores
-   - Nuttig voor diepgaande analyse
+2. **`explain_recommendation(module_id, student_profile)`**
+   - Toont waarom een specifieke module past bij het student profiel
+   - Highlight belangrijke woorden/termen die matchen
+   - Nuttig voor transparantie en vertrouwen
 
 3. **`get_statistics()`**
-   - Gemiddelde similarity over dataset
-   - Distributie van similarity scores
-   - Per embedding-type statistieken
+   - TF-IDF matrix statistieken (sparsity, feature count)
+   - Similarity score distributie
+   - Dataset overzicht
 
 ### Aanbevelingsalgoritme
 
@@ -494,12 +518,12 @@ Python 3.8+
 pandas>=1.3.0
 numpy>=1.21.0
 scikit-learn>=1.0.0
-sentence-transformers>=2.2.0
 matplotlib>=3.4.0
 seaborn>=0.11.0
 nltk>=3.6.0
-ipywidgets>=7.6.0
+umap-learn>=0.5.0
 jupyter>=1.0.0
+ipykernel>=6.0.0
 ```
 
 ### Installatie
@@ -529,9 +553,13 @@ jupyter notebook prepare_dataset.ipynb
 jupyter notebook eda_overview.ipynb
 # Analyseer data statistieken
 
+# 2b. Dimensionality Reduction (optioneel)
+jupyter notebook eda_dimensionality_reduction.ipynb
+# Visualiseer data met PCA, t-SNE, UMAP
+
 # 3. Feature Engineering
 jupyter notebook feature_engineering.ipynb
-# Genereer embeddings → .npy files
+# Genereer TF-IDF matrix → tfidf_matrix.npz en tfidf_vectorizer.pkl
 
 # 4. Recommender System
 jupyter notebook content_based_recommender.ipynb
@@ -546,19 +574,28 @@ jupyter notebook content_based_recommender.ipynb
 # 1. Initialiseer recommender (al gedaan in notebook)
 # recommender is al geladen
 
-# 2. Krijg aanbevelingen voor module ID
-recommend_modules(159, n=5)
+# 2. Krijg aanbevelingen voor student profiel
+student_profile = "Ik ben geïnteresseerd in psychologie, coaching en zorg"
+recommendations = recommender.get_recommendations_for_student(
+    student_profile, 
+    n_recommendations=5
+)
 
-# 3. Zoek op naam
-recommend_modules('psychologie', n=3)
+# 3. Met filters
+recommendations = recommender.get_recommendations_for_student(
+    student_profile,
+    n_recommendations=5,
+    level_filter="NLQF5",
+    min_similarity=0.3
+)
 
-# 4. Gebruik specifiek embedding type
-recommend_modules(162, n=5, embedding_type='content')
+# 4. Uitleg voor specifieke module
+recommender.explain_recommendation(159, student_profile)
 
-# 5. Vergelijk twee modules
-recommender.compare_modules(159, 162)
+# 5. Statistieken
+recommender.get_statistics()
 
-# 6. Start interactieve zoeker
+# 6. Start interactieve zoeker (indien beschikbaar in notebook)
 create_interactive_search()
 ```
 
@@ -568,17 +605,25 @@ create_interactive_search()
 import pandas as pd
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
+from scipy.sparse import load_npz
+import pickle
 
-# Laad data en embeddings
+# Laad data en TF-IDF componenten
 df = pd.read_csv('Uitgebreide_VKM_dataset_cleaned.csv')
-embeddings = np.load('combined_embeddings.npy')
+tfidf_matrix = load_npz('tfidf_matrix.npz')
 
-# Bereken similarity
-sim_matrix = cosine_similarity(embeddings)
+with open('tfidf_vectorizer.pkl', 'rb') as f:
+    vectorizer = pickle.load(f)
 
-# Vind top 5 voor module index 0
-similarities = sim_matrix[0]
-top_indices = similarities.argsort()[-6:-1][::-1]  # Exclusief zichzelf
+# Vectoriseer student profiel
+student_profile = "Ik ben geïnteresseerd in psychologie en coaching"
+student_vector = vectorizer.transform([student_profile])
+
+# Bereken similarity tussen student en alle modules
+similarities = cosine_similarity(student_vector, tfidf_matrix)[0]
+
+# Vind top 5 aanbevelingen
+top_indices = similarities.argsort()[-5:][::-1]
 
 # Toon resultaten
 for idx in top_indices:
@@ -589,40 +634,37 @@ for idx in top_indices:
 
 ## 🔬 Technische Details
 
-### Embedding Model Details
+### TF-IDF Vectorization Details
 
-**paraphrase-multilingual-MiniLM-L12-v2**
+**TF-IDF Pipeline:**
+```
+Input Text (gecleaned)
+    ↓
+Tokenization (word-level)
+    ↓
+N-gram Extraction (unigrams + bigrams)
+    ↓
+Term Frequency Calculation
+    ↓
+Inverse Document Frequency Weighting
+    ↓
+Sublinear TF Scaling (log)
+    ↓
+Feature Selection (top 6000)
+    ↓
+Sparse Matrix Output (211 × 2552)
+```
 
-**Architectuur:**
-```
-Input Text
-    ↓
-Tokenization (WordPiece)
-    ↓
-BERT Encoder (12 layers, 384 hidden)
-    ↓
-Mean Pooling over tokens
-    ↓
-L2 Normalization
-    ↓
-384D Output Vector
-```
+**Hyperparameter Tuning Resultaten:**
+- Getest: n-grams (1,1) vs (1,2), max_features (5000 vs 6000), stopwords (aan/uit)
+- Beste configuratie: (1,2) n-grams, 6000 features, geen stopwords
+- Resultaten opgeslagen in `tfidf_tuning_results.csv`
 
-**Training Data:**
-- 1 miljard+ sentence pairs
-- 50+ talen (inclusief Nederlands)
-- Paraphrase detection objective
-- Fine-tuned op semantic similarity tasks
-
-**Performance Benchmarks:**
-```
-Dataset                  Accuracy
-─────────────────────────────────
-STS Benchmark (EN)        93.4%
-SICK-R (EN)               86.2%
-STS Dutch                 89.7%
-Paraphrase Detection      95.1%
-```
+**TF-IDF Eigenschappen:**
+- Sparse matrix format (98% sparsity) voor efficiënt geheugengebruik
+- 2552 unieke features (vocabulary size)
+- Gemiddeld 47 non-zero features per module
+- Geschikt voor cosine similarity berekeningen
 
 ### Similarity Calculation
 
@@ -641,77 +683,90 @@ Paraphrase Detection      95.1%
 
 ### Computational Complexity
 
-**Embedding Generatie:**
+**TF-IDF Generatie:**
 ```
-Time: O(n × m × d)
-- n = aantal modules (266)
+Time: O(n × m × v)
+- n = aantal modules (211)
 - m = gemiddelde tekst lengte (~200 tokens)
-- d = model diepte (12 layers)
+- v = vocabulary size (2552)
 
-Totaal: ~30 seconden op CPU
-        ~5 seconden op GPU
+Totaal: ~2-5 seconden op CPU
 ```
 
 **Similarity Berekening:**
 ```
-Time: O(n² × d)
-- n = aantal modules (266)
-- d = embedding dimensie (1536)
+Time: O(n × d)
+- n = aantal modules (211)
+- d = aantal features (2552)
 
-Totaal: ~0.5 seconden
+Totaal: ~0.01 seconden (sparse matrix operaties)
 ```
 
 **Memory Requirements:**
 ```
-Embeddings: 266 × 1536 × 4 bytes ≈ 1.6 MB
-Similarity Matrix: 266² × 4 bytes ≈ 0.3 MB
-Model: ~120 MB (cached na eerste load)
+TF-IDF Matrix: 211 × 2552 (sparse, ~2% density) ≈ 0.06 MB
+Vectorizer: ~0.1 MB (vocabulary + parameters)
+Dataset: ~0.5 MB
 
-Total: ~150 MB RAM
+Total: ~1 MB RAM (zeer efficiënt!)
 ```
 
 ### Algorithm Pseudocode
 
 ```python
-FUNCTION get_recommendations(module_id, n):
-    # 1. Haal bron embedding op
-    source_embedding = embeddings[module_id]
+FUNCTION get_recommendations_for_student(student_profile, n):
+    # 1. Vectoriseer student profiel met fitted TF-IDF vectorizer
+    student_vector = vectorizer.transform([student_profile])
     
-    # 2. Bereken similarities
-    similarities = []
-    FOR each module IN all_modules:
-        IF module.id != module_id:
-            sim = cosine_similarity(source_embedding, module.embedding)
-            similarities.append((module, sim))
+    # 2. Bereken cosine similarity met alle modules
+    similarities = cosine_similarity(student_vector, tfidf_matrix)[0]
     
-    # 3. Sorteer op similarity
-    similarities.sort(key=lambda x: x[1], reverse=True)
+    # 3. Sorteer op similarity (descending)
+    sorted_indices = similarities.argsort()[::-1]
     
-    # 4. Retourneer top N
-    RETURN similarities[:n]
+    # 4. Filter op minimale similarity (optioneel)
+    filtered_indices = [idx for idx in sorted_indices 
+                       if similarities[idx] >= min_similarity]
+    
+    # 5. Retourneer top N met metadata
+    recommendations = []
+    FOR i IN range(min(n, len(filtered_indices))):
+        idx = filtered_indices[i]
+        recommendations.append({
+            'module': df.iloc[idx],
+            'similarity': similarities[idx],
+            'explanation': generate_explanation(student_profile, idx)
+        })
+    
+    RETURN recommendations
 END FUNCTION
 ```
 
 ### Data Structures
 
 ```python
-# Embeddings Dictionary
-embeddings_dict = {
-    'shortdescription': np.ndarray(shape=(266, 384)),
-    'description': np.ndarray(shape=(266, 384)),
-    'content': np.ndarray(shape=(266, 384)),
-    'learningoutcomes': np.ndarray(shape=(266, 384)),
-    'combined': np.ndarray(shape=(266, 1536))
-}
+# TF-IDF Components
+tfidf_matrix = scipy.sparse.csr_matrix(shape=(211, 2552))
+vectorizer = sklearn.feature_extraction.text.TfidfVectorizer(
+    max_features=6000,
+    ngram_range=(1, 2),
+    ...
+)
 
-# Similarity Matrices
-similarity_matrices = {
-    'shortdescription': np.ndarray(shape=(266, 266)),
-    'description': np.ndarray(shape=(266, 266)),
-    'content': np.ndarray(shape=(266, 266)),
-    'learningoutcomes': np.ndarray(shape=(266, 266)),
-    'combined': np.ndarray(shape=(266, 266))
-}
+# Dataset
+df = pd.DataFrame(shape=(211, 20))  # 211 modules, 20 kolommen
+
+# Output Format
+recommendations = [
+    {
+        'module_id': int,
+        'module_name': str,
+        'similarity_score': float,
+        'level': str,
+        'studycredit': int,
+        'explanation': str
+    }
+]
 ```
 
 ---
@@ -743,61 +798,36 @@ Waar:
 - ❌ Overspecialisatie mogelijk
 - ❌ Vereist goede feature representatie
 
-### Sentence Embeddings Theory
+### TF-IDF Theorie
 
-**Word Embeddings → Sentence Embeddings:**
+**Term Frequency-Inverse Document Frequency:**
 
-1. **Word2Vec/GloVe Era (2013-2017):**
-   - Woord-niveau embeddings
-   - Simple averaging voor zinnen
-   - Verlies van syntactische informatie
+TF-IDF is een statistische maat die de belangrijkheid van een woord in een document meet ten opzichte van een collectie documenten.
 
-2. **BERT Era (2018+):**
-   - Contextuele embeddings
-   - Bidirectional encoding
-   - Transfer learning mogelijk
+**Componenten:**
 
-3. **Sentence Transformers (2019+):**
-   - Finetuned voor zin-niveau similarity
-   - Siamese/triplet network architectuur
-   - Optimaal voor semantic search
+1. **Term Frequency (TF):**
+   - Hoe vaak een term voorkomt in een document
+   - Normalisatie voorkomt bias naar lange documenten
+   - Sublinear scaling (log) reduceert impact van zeer frequente termen
 
-**BERT Encoding Process:**
-```
-Input: "kennismaken psychologie gedrag"
+2. **Inverse Document Frequency (IDF):**
+   - Meet hoe zeldzaam een term is in de collectie
+   - Termen die in veel documenten voorkomen krijgen lagere gewichten
+   - Termen die uniek zijn voor een document krijgen hogere gewichten
 
-Token IDs: [101, 15234, 23451, 12098, 102]
-            ↓
-Position Embeddings: [0, 1, 2, 3, 4]
-            ↓
-12 Transformer Layers:
-    Self-Attention → Feed Forward → LayerNorm
-            ↓
-Hidden States: [h1, h2, h3, h4, h5]
-            ↓
-Mean Pooling: (h1 + h2 + h3 + h4 + h5) / 5
-            ↓
-Output: 384D Sentence Embedding
-```
+**TF-IDF Voordelen voor dit Project:**
+- ✅ Eenvoudig en snel te implementeren
+- ✅ Goede baseline voor tekst matching
+- ✅ Interpretabel (je kunt zien welke woorden belangrijk zijn)
+- ✅ Werkt goed met Nederlandse tekst na preprocessing
+- ✅ Sparse representatie (efficiënt geheugengebruik)
+- ✅ Geen externe model dependencies nodig
 
-### Dimensionality Reduction Overwegingen
-
-**Waarom 384 dimensies?**
-
-- Trade-off tussen expressiviteit en efficiency
-- MiniLM: distilled versie van BERT-base (768D)
-- 384D behoudt ~95% van informatie
-- Sneller te berekenen en opslaan
-
-**Alternatieve Dimensies:**
-```
-Model                    Dimensies    Performance    Speed
-────────────────────────────────────────────────────────────
-BERT-base                    768        100%          1x
-MiniLM-L12 (ons model)      384         95%          3x
-TinyBERT                    312         92%          5x
-DistilBERT                  768         97%          2x
-```
+**N-grams:**
+- Unigrams (1-grams): individuele woorden
+- Bigrams (2-grams): woordparen voor context
+- Combinatie (1,2): behoudt zowel woord- als contextuele informatie
 
 ---
 
@@ -817,9 +847,10 @@ DistilBERT                  768         97%          2x
    - Kleurcoding voor interpretatie
    - Gebruik voor: Resultaten sectie
 
-3. **Embedding Distributie** (uit feature_engineering.ipynb)
-   - Toont embedding eigenschappen
-   - Normaliteit check
+3. **TF-IDF Feature Analyse** (uit feature_engineering.ipynb)
+   - Toont belangrijkste features (woorden/n-grams)
+   - TF-IDF distributie per module
+   - Hyperparameter tuning resultaten
    - Gebruik voor: Feature Engineering sectie
 
 4. **EDA Correlatie Matrix** (uit eda_overview.ipynb)
@@ -827,20 +858,23 @@ DistilBERT                  768         97%          2x
    - Variable relationships
    - Gebruik voor: Data Analyse sectie
 
-5. **Top-K Evaluatie Grafiek** (uit content_based_recommender.ipynb)
+5. **Dimensionality Reduction Visualisaties** (uit eda_dimensionality_reduction.ipynb)
+   - PCA, t-SNE, UMAP visualisaties
+   - Module clustering patronen
+   - Gebruik voor: Data Analyse sectie
+
+6. **Top-K Evaluatie Grafiek** (uit content_based_recommender.ipynb)
    - Kwaliteit van aanbevelingen
    - Performance metrics
    - Gebruik voor: Evaluatie sectie
 
 ### Citatie Suggesties
 
-**Voor Sentence Transformers:**
+**Voor TF-IDF:**
 ```
-Reimers, N., & Gurevych, I. (2019). 
-Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks. 
-In Proceedings of the 2019 Conference on Empirical Methods in 
-Natural Language Processing and the 9th International Joint Conference 
-on Natural Language Processing (EMNLP-IJCNLP) (pp. 3982-3992).
+Salton, G., & Buckley, C. (1988). 
+Term-weighting approaches in automatic text retrieval. 
+Information processing & management, 24(5), 513-523.
 ```
 
 **Voor Content-Based Filtering:**
@@ -905,15 +939,15 @@ In Recommender systems handbook (pp. 73-105). Springer, Boston, MA.
 ├─────────────────────────────────────────────────────────┤
 │                                                          │
 │ Data Processing:                                        │
-│   - Text cleaning: ~2 sec voor 266 modules              │
-│   - Embedding generation: ~30 sec (CPU)                 │
-│   - Similarity calculation: ~0.5 sec                    │
+│   - Text cleaning: ~2 sec voor 211 modules              │
+│   - TF-IDF generation: ~2-5 sec (CPU)                  │
+│   - Similarity calculation: ~0.01 sec (sparse ops)     │
 │                                                          │
 │ Memory Usage:                                           │
-│   - Embeddings: 1.6 MB                                  │
-│   - Similarity matrices: 0.3 MB                         │
-│   - Model cache: 120 MB                                 │
-│   - Total: ~150 MB                                      │
+│   - TF-IDF matrix: 0.06 MB (sparse)                    │
+│   - Vectorizer: 0.1 MB                                 │
+│   - Dataset: 0.5 MB                                    │
+│   - Total: ~1 MB (zeer efficiënt!)                     │
 │                                                          │
 │ Recommendation Quality:                                 │
 │   - Avg similarity (top-5): 0.58 ± 0.12                │
@@ -921,9 +955,10 @@ In Recommender systems handbook (pp. 73-105). Springer, Boston, MA.
 │   - Diversity: Matig (content-based limitation)         │
 │                                                          │
 │ Scalability:                                            │
-│   - Current: 266 modules                                │
-│   - Theoretical max: ~10,000 modules                    │
-│   - Bottleneck: Similarity matrix O(n²)                 │
+│   - Current: 211 modules                                │
+│   - Theoretical max: ~100,000+ modules                 │
+│   - Bottleneck: TF-IDF fit O(n×m), similarity O(n×d)   │
+│   - Sparse matrices maken het zeer schaalbaar          │
 │                                                          │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -1000,9 +1035,9 @@ Dit project is beschikbaar voor onderwijsdoeleinden. Zie de repository voor spec
 
 ## 🙏 Acknowledgments
 
-- **Sentence Transformers** team voor het pre-trained model
-- **scikit-learn** voor machine learning utilities
+- **scikit-learn** voor TF-IDF vectorization en machine learning utilities
 - **NLTK** voor Nederlandse NLP ondersteuning
+- **UMAP** voor dimensionality reduction visualisaties
 - **Hogeschool Rotterdam** voor de VKM dataset
 
 ---
